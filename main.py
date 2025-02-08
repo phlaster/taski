@@ -52,7 +52,7 @@ class QuizEngine:
         
         if self.args.clean_screen:
             clear_screen()
-            
+
         self.session_data['start_time'] = datetime.now().isoformat()
         
         try:
@@ -98,7 +98,6 @@ class QuizEngine:
             (datetime.fromisoformat(self.session_data['end_time']) - 
              datetime.fromisoformat(self.session_data['start_time'])).total_seconds(), 2)
         
-        # Calculate statistics
         times = [q['time_taken'] for q in self.session_data['questions']]
         correct_times = [q['time_taken'] for q in self.session_data['questions'] if q['is_correct']]
         
@@ -109,13 +108,11 @@ class QuizEngine:
             'slowest_answer': round(max(times), 2) if times else 0
         }
         
-        # Prepare output structure
         output_data = {
             'quiz_name': self.task_provider.name,
             'sessions': []
         }
         
-        # Load existing data if file exists
         output_path = self.args.output
         if os.path.exists(output_path):
             with open(output_path, 'r') as f:
@@ -124,13 +121,9 @@ class QuizEngine:
                     raise ValueError(f"Existing file contains different quiz type: {existing_data['quiz_name']}")
                 output_data['sessions'] = existing_data['sessions']
 
-        # Add new session
         output_data['sessions'].append(self.session_data)
-        
-        # Ensure directory exists
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        # Write updated data
         with open(output_path, 'w') as f:
             json.dump(output_data, f, indent=2)
         print(f"\nSession saved to {output_path}")
@@ -154,7 +147,6 @@ def main():
 
     provider = provider_class(args)
     
-    # Set default output path if not specified
     if not args.output:
         filename = f"{safe_filename(provider.name)}.json"
         args.output = os.path.join('results', filename)
