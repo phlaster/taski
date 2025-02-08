@@ -1,17 +1,20 @@
-# main.py
 import argparse
 import importlib
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
 from queue import Queue
 from statistics import median
 from threading import Thread
-from abc import ABC, abstractmethod
 
 class TimeoutException(Exception): pass
+
+def safe_filename(name):
+    """Convert quiz name to filesystem-safe name"""
+    return re.sub(r'[^\w-]', '_', name).strip('_')
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -33,8 +36,7 @@ class QuizEngine:
     def __init__(self, task_provider, args):
         self.task_provider = task_provider
         self.args = args
-        self.results = {
-            'quiz_name': task_provider.name,
+        self.session_data = {
             'start_time': None,
             'end_time': None,
             'duration': None,
@@ -44,13 +46,14 @@ class QuizEngine:
         }
 
     def run(self):
-        if self.args.clean_screen:
-            clear_screen()
 
         print(f"\n{self.task_provider.description}\n")
         input("Press Enter to start the quiz...")
         
-        self.results['start_time'] = datetime.now().isoformat()
+        if self.args.clean_screen:
+            clear_screen()
+            
+        self.session_data['start_time'] = datetime.now().isoformat()
         
         try:
             for _ in range(self.args.num_questions):
@@ -62,7 +65,7 @@ class QuizEngine:
 
     def _ask_question(self):
         question, correct = self.task_provider.generate_task()
-        print(f"\nQ{len(self.results['questions'])+1}: {question}")
+        print(f"\nQ{len(self.session_data['questions'])+1}: {question}")
         
         start = time.time()
         try:
@@ -81,7 +84,7 @@ class QuizEngine:
             self.task_provider.validate_answer(answer, correct)
 
     def _store_result(self, question, correct, answer, time_taken, is_correct):
-        self.results['questions'].append({
+        self.session_data['questions'].append({
             'question': question,
             'correct_answer': correct,
             'user_answer': answer,
@@ -90,25 +93,47 @@ class QuizEngine:
         })
 
     def _finalize_session(self):
-        self.results['end_time'] = datetime.now().isoformat()
-        self.results['duration'] = round(
-            (datetime.fromisoformat(self.results['end_time']) - 
-             datetime.fromisoformat(self.results['start_time'])).total_seconds(), 2)
+        self.session_data['end_time'] = datetime.now().isoformat()
+        self.session_data['duration'] = round(
+            (datetime.fromisoformat(self.session_data['end_time']) - 
+             datetime.fromisoformat(self.session_data['start_time'])).total_seconds(), 2)
         
-        times = [q['time_taken'] for q in self.results['questions']]
-        correct_times = [q['time_taken'] for q in self.results['questions'] if q['is_correct']]
+        # Calculate statistics
+        times = [q['time_taken'] for q in self.session_data['questions']]
+        correct_times = [q['time_taken'] for q in self.session_data['questions'] if q['is_correct']]
         
-        self.results['statistics'] = {
+        self.session_data['statistics'] = {
             'average_time': round(sum(times)/len(times), 2) if times else 0,
             'median_time': round(median(times), 2) if times else 0,
             'fastest_correct': round(min(correct_times), 2) if correct_times else None,
             'slowest_answer': round(max(times), 2) if times else 0
         }
         
-        os.makedirs(os.path.dirname(self.args.output), exist_ok=True)
-        with open(self.args.output, 'w') as f:
-            json.dump(self.results, f, indent=2)
-        print(f"\nSession saved to {self.args.output}")
+        # Prepare output structure
+        output_data = {
+            'quiz_name': self.task_provider.name,
+            'sessions': []
+        }
+        
+        # Load existing data if file exists
+        output_path = self.args.output
+        if os.path.exists(output_path):
+            with open(output_path, 'r') as f:
+                existing_data = json.load(f)
+                if existing_data['quiz_name'] != output_data['quiz_name']:
+                    raise ValueError(f"Existing file contains different quiz type: {existing_data['quiz_name']}")
+                output_data['sessions'] = existing_data['sessions']
+
+        # Add new session
+        output_data['sessions'].append(self.session_data)
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Write updated data
+        with open(output_path, 'w') as f:
+            json.dump(output_data, f, indent=2)
+        print(f"\nSession saved to {output_path}")
 
 def main():
     base_parser = argparse.ArgumentParser(add_help=False)
@@ -129,10 +154,10 @@ def main():
 
     provider = provider_class(args)
     
+    # Set default output path if not specified
     if not args.output:
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        safe_name = provider.name.replace(' ', '_')
-        args.output = f"results/{safe_name}_{timestamp}.json"
+        filename = f"{safe_filename(provider.name)}.json"
+        args.output = os.path.join('results', filename)
 
     engine = QuizEngine(provider, args)
     engine.run()
