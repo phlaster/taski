@@ -63,25 +63,30 @@ class QuizEngine:
         }
 
     def run(self):
-        print(f"\n{self.task_provider.description}\n")
-        input("Press Enter to start the quiz...")
-
-        if self.args.clean_screen:
-            clear_screen()
-        self.session_data['start_time'] = datetime.now().isoformat()
-
         try:
+            print(f"\n{self.task_provider.description}\n")
+            input("Press Enter to start the quiz...")
+            if self.args.clean_screen:
+                clear_screen()
+            self.session_data['start_time'] = datetime.now().isoformat()
+
+            # Run the quiz loop
             for _ in range(self.args.num_questions):
-                self._ask_question()
-                if self.args.clean_screen:
-                    clear_screen()
+                try:
+                    self._ask_question()
+                    if self.args.clean_screen:
+                        clear_screen()
+                except KeyboardInterrupt:
+                    print("\nQuiz interrupted by the user.")
+                    break  # Exit the question loop
+        except KeyboardInterrupt:
+            print("\nQuiz session terminated by the user before starting.")
         finally:
             self._finalize_session()
 
     def _ask_question(self):
         question, correct = self.task_provider.generate_task()
         print(f"\nQ{len(self.session_data['questions'])+1}: {question}")
-
         start = time.time()
         try:
             answer = input_with_timeout("Answer: ", self.args.time_limit)
@@ -91,7 +96,23 @@ class QuizEngine:
         elapsed = time.time() - start
         is_correct = self._validate_answer(answer, correct)
         self._store_result(question, correct, answer, elapsed, is_correct)
-        print("Correct!" if is_correct else f"Wrong. Correct answer: {correct}")
+        if self.args.errors != 'hide':
+            if is_correct:
+                print("\033[32mCorrect!\033[0m")
+            else:
+                if self.args.errors == 'show':
+                    print("\033[31mIncorrect!\033[0m")
+                else:
+                    if isinstance(correct, list):
+                        correct_display = ', '.join(map(str, correct))
+                    else:
+                        correct_display = str(correct)
+                    print(f"\033[31mIncorrect! Correct answer: {correct_display}\033[0m")
+            # Wait for user to press Enter
+            input("Press Enter to continue...")
+        # Clear screen after handling feedback
+        if self.args.clean_screen:
+            clear_screen()
 
     def _validate_answer(self, answer, correct):
         return answer is not None and \
@@ -106,27 +127,44 @@ class QuizEngine:
             'is_correct': is_correct
         })
 
+    def print_session_summary(self):
+        print(f"\nSession Summary:")
+        print(f"\tQuestions: {self.session_data['statistics']['correct_answers']}/{self.session_data['statistics']['total_questions']}")
+        print(f"\tSession accuracy: {self.session_data['statistics']['accuracy']}%")
+        print(f"\tAverage time per question: {self.session_data['statistics']['average_time']}s")
+        print(f"\tFastest correct answer: {self.session_data['statistics']['fastest_correct'] or 'N/A'}s")
+        print(f"\tSlowest answer: {self.session_data['statistics']['slowest_answer']}s")
+        print(f"\tTotal time: {self.session_data['duration']}s")
+        print(f"\tFilename: {self.args.file}")
+
     def _finalize_session(self):
+        if not self.session_data['questions']:  # No questions were answered
+            print("No questions were completed. Exiting without saving.")
+            return
+
         self.session_data['end_time'] = datetime.now().isoformat()
         self.session_data['duration'] = round(
             (datetime.fromisoformat(self.session_data['end_time']) - 
              datetime.fromisoformat(self.session_data['start_time'])).total_seconds(), 2)
-
         times = [q['time_taken'] for q in self.session_data['questions']]
+        total_questions = len(self.session_data['questions'])
+        correct_answers = sum(q['is_correct'] for q in self.session_data['questions'])
+        accuracy = round((correct_answers / total_questions * 100), 2) if total_questions > 0 else 0
         correct_times = [q['time_taken'] for q in self.session_data['questions'] if q['is_correct']]
-
         self.session_data['statistics'] = {
             'average_time': round(sum(times)/len(times), 2) if times else 0,
             'median_time': round(median(times), 2) if times else 0,
             'fastest_correct': round(min(correct_times), 2) if correct_times else None,
-            'slowest_answer': round(max(times), 2) if times else 0
+            'slowest_answer': round(max(times), 2) if times else 0,
+            'total_questions': total_questions,
+            'correct_answers': correct_answers,
+            'accuracy': accuracy
         }
 
         output_data = {
             'quiz_name': self.task_provider.name,
             'sessions': []
         }
-
         if self.args.file.endswith('.json.gz'):
             mode = 'gzip'
         elif self.args.file.endswith('.json'):
@@ -135,7 +173,6 @@ class QuizEngine:
             print("Error: Output file must have a '.json' or '.json.gz' extension.")
             sys.exit(1)
         output_path = self.args.file
-
         if os.path.exists(output_path):
             if mode == 'gzip':
                 with gzip.open(output_path, 'rt') as f:
@@ -147,17 +184,16 @@ class QuizEngine:
                 raise ValueError(f"Existing file contains different quiz type: {existing_data['quiz_name']}")
             output_data['sessions'] = existing_data['sessions']
         output_data['sessions'].append(self.session_data)
-
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
         if mode == 'gzip':
             with gzip.open(output_path, 'wt') as f:
                 json.dump(output_data, f, indent=2)
         else:
-            with open(output_path, 'w') as f:
+             with open(output_path, 'w') as f:
                 json.dump(output_data, f, indent=2)
+        
+        if not self.args.no_summary: self.print_session_summary()
 
-        print(f"\nSession saved to {output_path}")
 
 def main():
     base_parser = argparse.ArgumentParser(add_help=False)
@@ -171,6 +207,8 @@ def main():
     parser.add_argument('--num-questions', type=int, default=10)
     parser.add_argument('--time-limit', type=float)
     parser.add_argument('--clean-screen', action='store_true')
+    parser.add_argument('--no-summary', action='store_true', help="Do not print session summary upon the exit")
+    parser.add_argument('--errors', choices=['hide', 'show', 'hint'], default='hint', help='Control error message display (default: hint)')
     parser.add_argument('--file', help="File path to store the results in. Use '.json' for uncompressed or '.json.gz' for compressed.")
     provider_class.add_arguments(parser)
     args = parser.parse_args()
