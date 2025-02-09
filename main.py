@@ -246,6 +246,22 @@ class QuizEngine:
         if not self.args.no_summary: self.print_session_summary()
 
 
+def create_parser(provider_class):
+    """Create and configure argument parser with provider-specific arguments"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--task', required=True, help="Task provider, e.g.: `task_providers.math.MultiplicationTaskProvider`")
+    parser.add_argument('--num-questions', type=int, default=10, help="How many questions in one session")
+    parser.add_argument('--time-limit', type=float, help="Limit in seconds for each question")
+    parser.add_argument('--clean-screen', action='store_true', help="Clear the terminal after each question")
+    parser.add_argument('--no-summary', action='store_true', 
+                      help="Ommit session summary at the end")
+    parser.add_argument('--errors', choices=['hide', 'show', 'hint'], default='hint',
+                      help='Control error message display (default: hint)')
+    parser.add_argument('--mistakes', action='store_true', help='Include up to 3×num_questions previous mistakes')
+    parser.add_argument('--file', help="File path to store results. Use '.json' or '.json.gz' extension.")
+    provider_class.add_arguments(parser)
+    return parser
+
 def main():
     base_parser = argparse.ArgumentParser(add_help=False)
     base_parser.add_argument('--task', required=True)
@@ -253,16 +269,7 @@ def main():
     module_path, class_name = task_args.task.rsplit('.', 1)
     provider_class = getattr(importlib.import_module(module_path), class_name)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--task', required=True)
-    parser.add_argument('--num-questions', type=int, default=10)
-    parser.add_argument('--time-limit', type=float)
-    parser.add_argument('--clean-screen', action='store_true')
-    parser.add_argument('--no-summary', action='store_true', help="Do not print session summary upon the exit")
-    parser.add_argument('--errors', choices=['hide', 'show', 'hint'], default='hint', help='Control error message display (default: hint)')
-    parser.add_argument('--mistakes', action='store_true', help='Include up to 3×num_questions previous mistakes')
-    parser.add_argument('--file', help="File path to store the results in. Use '.json' for uncompressed or '.json.gz' for compressed.")
-    provider_class.add_arguments(parser)
+    parser = create_parser(provider_class)
     args = parser.parse_args()
 
     provider = provider_class(args)
