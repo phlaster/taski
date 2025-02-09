@@ -1,6 +1,7 @@
 import argparse
 import importlib
 import json
+import gzip
 import os
 import re
 import sys
@@ -18,6 +19,22 @@ def safe_filename(name):
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
+
+def check_filename_correctness(args, provider):
+    if not args.file:
+        unzipped_name = os.path.join('results', f"{safe_filename(provider.name)}.json")
+        zipped_name = unzipped_name + ".gz"
+
+        if os.path.exists(unzipped_name) and os.path.exists(zipped_name):
+            print("Automatic naming failed, 2 files with appropriate names were found. State `--file` argument explicitly.")
+            sys.exit(1)
+        
+        args.file = unzipped_name if os.path.exists(unzipped_name) else zipped_name
+
+    if args.file:
+        if not args.file.endswith(('.json', '.json.gz')):
+            print("Error: Output file must have a '.json' or '.json.gz' extension.")
+            sys.exit(1)
 
 def input_with_timeout(prompt, timeout):
     print(prompt, end='', flush=True)
@@ -46,15 +63,13 @@ class QuizEngine:
         }
 
     def run(self):
-
         print(f"\n{self.task_provider.description}\n")
         input("Press Enter to start the quiz...")
-        
+
         if self.args.clean_screen:
             clear_screen()
-
         self.session_data['start_time'] = datetime.now().isoformat()
-        
+
         try:
             for _ in range(self.args.num_questions):
                 self._ask_question()
@@ -66,7 +81,7 @@ class QuizEngine:
     def _ask_question(self):
         question, correct = self.task_provider.generate_task()
         print(f"\nQ{len(self.session_data['questions'])+1}: {question}")
-        
+
         start = time.time()
         try:
             answer = input_with_timeout("Answer: ", self.args.time_limit)
@@ -74,7 +89,6 @@ class QuizEngine:
             answer = None
             print("\nTime's up!")
         elapsed = time.time() - start
-
         is_correct = self._validate_answer(answer, correct)
         self._store_result(question, correct, answer, elapsed, is_correct)
         print("Correct!" if is_correct else f"Wrong. Correct answer: {correct}")
@@ -97,42 +111,58 @@ class QuizEngine:
         self.session_data['duration'] = round(
             (datetime.fromisoformat(self.session_data['end_time']) - 
              datetime.fromisoformat(self.session_data['start_time'])).total_seconds(), 2)
-        
+
         times = [q['time_taken'] for q in self.session_data['questions']]
         correct_times = [q['time_taken'] for q in self.session_data['questions'] if q['is_correct']]
-        
+
         self.session_data['statistics'] = {
             'average_time': round(sum(times)/len(times), 2) if times else 0,
             'median_time': round(median(times), 2) if times else 0,
             'fastest_correct': round(min(correct_times), 2) if correct_times else None,
             'slowest_answer': round(max(times), 2) if times else 0
         }
-        
+
         output_data = {
             'quiz_name': self.task_provider.name,
             'sessions': []
         }
-        
-        output_path = self.args.output
-        if os.path.exists(output_path):
-            with open(output_path, 'r') as f:
-                existing_data = json.load(f)
-                if existing_data['quiz_name'] != output_data['quiz_name']:
-                    raise ValueError(f"Existing file contains different quiz type: {existing_data['quiz_name']}")
-                output_data['sessions'] = existing_data['sessions']
 
+        if self.args.file.endswith('.json.gz'):
+            mode = 'gzip'
+        elif self.args.file.endswith('.json'):
+            mode = 'json'
+        else:
+            print("Error: Output file must have a '.json' or '.json.gz' extension.")
+            sys.exit(1)
+        output_path = self.args.file
+
+        if os.path.exists(output_path):
+            if mode == 'gzip':
+                with gzip.open(output_path, 'rt') as f:
+                    existing_data = json.load(f)
+            else:
+                with open(output_path, 'r') as f:
+                    existing_data = json.load(f)
+            if existing_data['quiz_name'] != self.task_provider.name:
+                raise ValueError(f"Existing file contains different quiz type: {existing_data['quiz_name']}")
+            output_data['sessions'] = existing_data['sessions']
         output_data['sessions'].append(self.session_data)
+
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        with open(output_path, 'w') as f:
-            json.dump(output_data, f, indent=2)
+
+        if mode == 'gzip':
+            with gzip.open(output_path, 'wt') as f:
+                json.dump(output_data, f, indent=2)
+        else:
+            with open(output_path, 'w') as f:
+                json.dump(output_data, f, indent=2)
+
         print(f"\nSession saved to {output_path}")
 
 def main():
     base_parser = argparse.ArgumentParser(add_help=False)
     base_parser.add_argument('--task', required=True)
     task_args, remaining = base_parser.parse_known_args()
-
     module_path, class_name = task_args.task.rsplit('.', 1)
     provider_class = getattr(importlib.import_module(module_path), class_name)
 
@@ -141,15 +171,12 @@ def main():
     parser.add_argument('--num-questions', type=int, default=10)
     parser.add_argument('--time-limit', type=float)
     parser.add_argument('--clean-screen', action='store_true')
-    parser.add_argument('--output')
+    parser.add_argument('--file', help="File path to store the results in. Use '.json' for uncompressed or '.json.gz' for compressed.")
     provider_class.add_arguments(parser)
     args = parser.parse_args()
 
     provider = provider_class(args)
-    
-    if not args.output:
-        filename = f"{safe_filename(provider.name)}.json"
-        args.output = os.path.join('results', filename)
+    check_filename_correctness(args, provider)
 
     engine = QuizEngine(provider, args)
     engine.run()
