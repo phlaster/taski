@@ -1,4 +1,4 @@
-# Quiz Master - Command-Line Quiz Application
+# Taski - Command-Line Quiz Application
 
 A modular quiz system with multiple question providers and progress tracking.
 
