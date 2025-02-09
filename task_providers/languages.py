@@ -36,8 +36,7 @@ class FrenchWordsTaskProvider(TaskProvider):
         parser.add_argument("--f2e", action="store_true", default=False, help="French to English translation")
         parser.add_argument("--direct", action="store_true", help="Enable direct translation tasks")
         parser.add_argument("--match", action="store_true", help="Enable matching tasks")
-        parser.add_argument("--ignore-accents", action="store_true",
-                          help="Treat accented and non-accented versions as identical")
+        parser.add_argument("--ignore-accents", action="store_true", help="Treat accented and non-accented versions as identical")
         parser.add_argument("--match-options", type=int, default=3, help="How many options are in match tasks")
 
 

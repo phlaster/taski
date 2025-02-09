@@ -3,6 +3,7 @@ import importlib
 import json
 import gzip
 import os
+import random
 import re
 import sys
 import time
@@ -53,6 +54,7 @@ class QuizEngine:
     def __init__(self, task_provider, args):
         self.task_provider = task_provider
         self.args = args
+        self.retry_questions = []
         self.session_data = {
             'start_time': None,
             'end_time': None,
@@ -61,6 +63,44 @@ class QuizEngine:
             'statistics': {},
             'settings': vars(args)
         }
+    def _load_retry_questions(self):
+        """Load previous incorrect answers from result files"""
+        safe_name = safe_filename(self.task_provider.name)
+        file_candidates = [
+            os.path.join('results', f"{safe_name}.json"),
+            os.path.join('results', f"{safe_name}.json.gz")
+        ]
+        existing_files = [f for f in file_candidates if os.path.exists(f)]
+        
+        if not existing_files:
+            return []
+        
+        try:
+            file_path = existing_files[0]
+            open_func = gzip.open if file_path.endswith('.gz') else open
+            mode = 'rt' if file_path.endswith('.gz') else 'r'
+            
+            with open_func(file_path, mode) as f:
+                data = json.load(f)
+                if data['quiz_name'] != self.task_provider.name:
+                    return []
+                
+                # Collect most recent 3*num_questions questions
+                recent_questions = []
+                for session in reversed(data['sessions']):  # Newest sessions first
+                    for q in reversed(session['questions']):  # Preserve original question order
+                        recent_questions.insert(0, q)  # Add to beginning to maintain chronology
+                        if len(recent_questions) >= 3 * self.args.num_questions:
+                            break
+                    if len(recent_questions) >= 3 * self.args.num_questions:
+                        break
+                
+                # Extract mistakes from recent questions
+                errors = [q for q in recent_questions if not q['is_correct']]
+                random.shuffle(errors)
+                return [(q['question'], q['correct_answer']) for q in errors[:self.args.num_questions]]
+        except Exception as e:
+            return []
 
     def run(self):
         try:
@@ -71,9 +111,14 @@ class QuizEngine:
             self.session_data['start_time'] = datetime.now().isoformat()
 
             # Run the quiz loop
+            self.retry_questions = self._load_retry_questions()[:self.args.num_questions]
+            remaining_questions = self.args.num_questions - len(self.retry_questions)
+
+            # Run the quiz loop
             for _ in range(self.args.num_questions):
                 try:
-                    self._ask_question()
+                    task = self._get_next_task()
+                    self._ask_question(*task)
                     if self.args.clean_screen:
                         clear_screen()
                 except KeyboardInterrupt:
@@ -84,8 +129,14 @@ class QuizEngine:
         finally:
             self._finalize_session()
 
-    def _ask_question(self):
-        question, correct = self.task_provider.generate_task()
+    def _get_next_task(self):
+        if self.retry_questions:
+            return self.retry_questions.pop(0)
+        return self.task_provider.generate_task()
+
+    def _ask_question(self, question, correct):
+        """Ask a question, handling both new and retry questions"""
+        is_retry = len(self.session_data['questions']) < self.args.mistakes
         print(f"\nQ{len(self.session_data['questions'])+1}: {question}")
         start = time.time()
         try:
@@ -94,7 +145,7 @@ class QuizEngine:
             answer = None
             print("\nTime's up!")
         elapsed = time.time() - start
-        is_correct = self._validate_answer(answer, correct)
+        is_correct = False if is_retry and not answer else self._validate_answer(answer, correct)
         self._store_result(question, correct, answer, elapsed, is_correct)
         if self.args.errors != 'hide':
             if is_correct:
@@ -209,6 +260,7 @@ def main():
     parser.add_argument('--clean-screen', action='store_true')
     parser.add_argument('--no-summary', action='store_true', help="Do not print session summary upon the exit")
     parser.add_argument('--errors', choices=['hide', 'show', 'hint'], default='hint', help='Control error message display (default: hint)')
+    parser.add_argument('--mistakes', action='store_true', help='Include up to 3×num_questions previous mistakes')
     parser.add_argument('--file', help="File path to store the results in. Use '.json' for uncompressed or '.json.gz' for compressed.")
     provider_class.add_arguments(parser)
     args = parser.parse_args()
