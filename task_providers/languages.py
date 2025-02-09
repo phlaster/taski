@@ -326,7 +326,7 @@ class FrenchWordsTaskProvider(TaskProvider):
             if word != source_word:
                 distractors.extend(translations)
         
-        options = random.sample(distractors, self.match_options - 1)
+        options = random.sample(distractors, min(max(self.match_options - 1, 2), len(distractors)))
         options.append(correct)
         random.shuffle(options)
         
