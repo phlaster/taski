@@ -37,23 +37,32 @@ class FrenchWordsTaskProvider(TaskProvider):
 
     @classmethod
     def add_arguments(cls, parser):
-        group = parser.add_mutually_exclusive_group(required=True)
-        group.add_argument('--e2f', action='store_true', help='English to French translation')
-        group.add_argument('--f2e', action='store_true', help='French to English translation')
+        parser.add_argument('--e2f', action='store_true', default=False, help='English to French translation')
+        parser.add_argument('--f2e', action='store_true', default=False, help='French to English translation')
         parser.add_argument('--direct', action='store_true', help='Enable direct translation tasks')
         parser.add_argument('--match', action='store_true', help='Enable matching tasks')
         parser.add_argument('--ignore-accents', action='store_true',
                           help='Treat accented and non-accented versions as identical')
+        parser.add_argument('--match-options', type=int, default=3, help='How many options are in match tasks')
 
     def __init__(self, args):
-        self.direction = 'e2f' if args.e2f else 'f2e'
-        self.current_vocab = self.E2F_VOCAB if args.e2f else self.F2E_VOCAB
+        self.direction = 'both' if (args.e2f == args.f2e) else 'e2f' if args.e2f else 'f2e'
+        match self.direction:
+            case 'e2f':  
+                self.current_vocab = self.E2F_VOCAB
+            case 'f2e':  
+                self.current_vocab = self.F2E_VOCAB
+            case 'both':
+                unique_keys = set(self.E2F_VOCAB.keys()).symmetric_difference(set(self.F2E_VOCAB.keys()))
+                self.current_vocab = {k: self.E2F_VOCAB.get(k, self.F2E_VOCAB.get(k)) for k in unique_keys}
+        
         self.active_modes = []
         if args.direct: self.active_modes.append('direct')
         if args.match: self.active_modes.append('match')
         if not self.active_modes:
             self.active_modes = ['direct', 'match']
-            
+        
+        self.match_options = args.match_options
         self.ignore_accents = args.ignore_accents
         self.source_words = list(self.current_vocab.keys())
 
@@ -68,28 +77,34 @@ class FrenchWordsTaskProvider(TaskProvider):
     def _create_direct_task(self, source_word):
         if self.direction == 'e2f':
             question = f"Translate to French: {source_word}"
+        elif self.direction == 'f2e':
+            question = f"Translate to English: {source_word}"
+        elif source_word in self.E2F_VOCAB:
+            question = f"Translate to French: {source_word}"
         else:
             question = f"Translate to English: {source_word}"
-            
+
         return question, self.current_vocab[source_word]
 
     def _create_match_task(self, source_word):
-        correct_translations = self.current_vocab[source_word]
-        correct = correct_translations[0]  # Use first translation as correct answer
+        source_lang = "English" if source_word in self.E2F_VOCAB else "French"
+        target_lang = "French" if source_lang == "English" else "English"
+        vocab = self.E2F_VOCAB if source_lang=="English" else self.F2E_VOCAB
+        correct_translations = vocab[source_word]
+        correct = random.choice(correct_translations)
         
-        # Collect distractors from other words' translations
         distractors = []
-        for word, translations in self.current_vocab.items():
+        for word, translations in vocab.items():
             if word != source_word:
                 distractors.extend(translations)
         
-        options = random.sample(distractors, 2)  # Get 2 wrong answers
+        options = random.sample(distractors, self.match_options - 1)
         options.append(correct)
         random.shuffle(options)
         
         correct_index = options.index(correct) + 1  # Options are 1-based
         
-        question = f"Match translation for:\n{source_word}\n\nOptions:"
+        question = f"Match {target_lang} translation for:\n{source_word}\n"
         for i, opt in enumerate(options, 1):
             question += f"\n{i}) {opt}"
             
