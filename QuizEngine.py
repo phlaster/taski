@@ -62,17 +62,15 @@ class QuizEngine:
                 if data['quiz_name'] != self.task_provider.name:
                     return []
                 
-                # Collect most recent 3*num_questions questions
                 recent_questions = []
-                for session in reversed(data['sessions']):  # Newest sessions first
-                    for q in reversed(session['questions']):  # Preserve original question order
-                        recent_questions.insert(0, q)  # Add to beginning to maintain chronology
+                for session in reversed(data['sessions']):
+                    for q in reversed(session['questions']):
+                        recent_questions.insert(0, q)
                         if len(recent_questions) >= 3 * self.args.num_questions:
                             break
                     if len(recent_questions) >= 3 * self.args.num_questions:
                         break
                 
-                # Extract mistakes from recent questions
                 errors = [q for q in recent_questions if not q['is_correct']]
                 random.shuffle(errors)
                 return [(q['question'], q['correct_answer']) for q in errors[:self.args.num_questions]]
@@ -87,11 +85,9 @@ class QuizEngine:
                 clear_screen()
             self.session_data['start_time'] = datetime.now().isoformat()
 
-            # Run the quiz loop
             self.retry_questions = self._load_retry_questions()[:self.args.num_questions]
             remaining_questions = self.args.num_questions - len(self.retry_questions)
 
-            # Run the quiz loop
             for _ in range(self.args.num_questions):
                 try:
                     task = self._get_next_task()
@@ -100,7 +96,7 @@ class QuizEngine:
                         clear_screen()
                 except KeyboardInterrupt:
                     print("\nQuiz interrupted by the user.")
-                    break  # Exit the question loop
+                    break
         except KeyboardInterrupt:
             print("\nQuiz session terminated by the user before starting.")
         finally:
@@ -136,9 +132,7 @@ class QuizEngine:
                     else:
                         correct_display = str(correct)
                     print(f"\033[31mIncorrect! Correct answer: {correct_display}\033[0m")
-            # Wait for user to press Enter
             input("Press Enter to continue...")
-        # Clear screen after handling feedback
         if self.args.clean_screen:
             clear_screen()
 
@@ -166,7 +160,7 @@ class QuizEngine:
         print(f"\tFilename: {self.args.file}")
 
     def _finalize_session(self):
-        if not self.session_data['questions']:  # No questions were answered
+        if not self.session_data['questions']:
             print("No questions were completed. Exiting without saving.")
             return
 

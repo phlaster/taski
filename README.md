@@ -36,11 +36,11 @@ python main.py --task <TASK_PROVIDER> [--help] [OPTIONS]
 ### Core Arguments
 | Argument               | Description                                                                 |
 |------------------------|-----------------------------------------------------------------------------|
-| `--task TASK`          | **Required** Question provider (e.g. `task_providers.math.MultiplicationTaskProvider`) |
+| `--task TASK`          | **Required** Question provider (e.g. `task_providers.math.MathTaskProvider`)|
 | `--help`               | Prints all command line option for given provider and exits                 |
 | `--num-questions N`    | Number of questions (default: 10)                                           |
 | `--time-limit SECONDS` | Answer time limit per question                                              |
-| `--clean-screen`        | Clear screen between questions                                             |
+| `--clean-screen`       | Clear screen between questions                                              |
 | `--errors MODE`        | Feedback mode: `hide`, `show`, or `hint` (default)                          |
 | `--mistakes`           | Include previous mistakes (3×num_questions window)                          |
 | `--file PATH`          | Custom results file path (default: auto-generated in `results/`)            |
@@ -48,12 +48,13 @@ python main.py --task <TASK_PROVIDER> [--help] [OPTIONS]
 
 ## Task Providers
 
-### 1. Multiplication Practice
+### 1. Math Practice
 ```bash
-python main.py --task task_providers.math.MultiplicationTaskProvider
+python main.py --task task_providers.math.MathTaskProvider
 ```
 **Options:**
 - `--max-factor N` - Maximum multiplicand value (default: 12)
+- `--sum-factor N` - Summation tasks up to 10^? (default: 2)
 
 ### 2. French Vocabulary
 ```bash
@@ -69,9 +70,9 @@ python main.py --task task_providers.languages.FrenchWordsTaskProvider
 
 ## Examples
 
-1. Basic multiplication quiz:
+1. Basic Math quiz:
     ```bash
-    python main.py --task task_providers.math.MultiplicationTaskProvider --num-questions 15
+    python main.py --task task_providers.math.MathTaskProvider --num-questions 15
     ```
 
 2. French practice with mistake retries:
@@ -84,7 +85,7 @@ python main.py --task task_providers.languages.FrenchWordsTaskProvider
 
 3. Timed quiz with clean interface:
     ```bash
-    python main.py --task task_providers.math.MultiplicationTaskProvider \
+    python main.py --task task_providers.math.MathTaskProvider \
     --time-limit 5 \
     --clean-screen \
     --errors hide

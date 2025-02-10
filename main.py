@@ -9,7 +9,7 @@ from utils import safe_filename, clear_screen, check_filename_correctness
 def create_parser(provider_class):
     """Create and configure argument parser with provider-specific arguments"""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--task', required=True, help="Task provider, e.g.: `task_providers.math.MultiplicationTaskProvider`")
+    parser.add_argument('--task', required=True, help="Task provider, e.g.: `task_providers.math.MathTaskProvider`")
     parser.add_argument('--num-questions', type=int, default=10, help="How many questions in one session")
     parser.add_argument('--time-limit', type=float, help="Limit in seconds for each question")
     parser.add_argument('--clean-screen', action='store_true', help="Clear the terminal after each question")
