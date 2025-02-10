@@ -5,7 +5,7 @@ import os
 from .base import TaskProvider
 
 class FrenchWordsTaskProvider(TaskProvider):
-    def parse_csv_to_dict(self, file_path):
+    def _parse_csv_to_dict(self, file_path):
         result = {}        
         with open(file_path, mode='r', encoding='utf-8') as file:
             reader = csv.reader(file)
@@ -41,8 +41,8 @@ class FrenchWordsTaskProvider(TaskProvider):
 
 
     def __init__(self, args):
-        self.E2F_VOCAB = self.parse_csv_to_dict(os.path.join("task_providers", "e2f.csv"))
-        self.F2E_VOCAB = self.parse_csv_to_dict(os.path.join("task_providers", "f2e.csv"))
+        self.E2F_VOCAB = self._parse_csv_to_dict(os.path.join("task_providers", "e2f.csv"))
+        self.F2E_VOCAB = self._parse_csv_to_dict(os.path.join("task_providers", "f2e.csv"))
         self.direction = "both" if (args.e2f == args.f2e) else "e2f" if args.e2f else "f2e"
         match self.direction:
             case "e2f":  
