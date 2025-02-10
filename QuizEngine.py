@@ -13,18 +13,6 @@ from statistics import median, mean
 from TimeoutException import TimeoutException
 from utils import safe_filename, clear_screen
 
-def input_with_timeout(prompt, timeout):
-    print(prompt, end='', flush=True)
-    q = Queue()
-    t = Thread(target=lambda: q.put(sys.stdin.readline().strip()))
-    t.daemon = True
-    t.start()
-    try:
-        return q.get(timeout=timeout)
-    except Exception:
-        raise TimeoutException()
-    finally:
-        t.join(0)
 
 
 class QuizEngine:
@@ -40,6 +28,20 @@ class QuizEngine:
             'statistics': {},
             'settings': vars(args)
         }
+    
+    def _input_with_timeout(self, prompt, timeout):
+        print(prompt, end='', flush=True)
+        q = Queue()
+        t = Thread(target=lambda: q.put(sys.stdin.readline().strip()))
+        t.daemon = True
+        t.start()
+        try:
+            return q.get(timeout=timeout)
+        except Exception:
+            raise TimeoutException()
+        finally:
+            t.join(0)
+    
     def _load_retry_questions(self):
         """Load previous incorrect answers from result files"""
         safe_name = safe_filename(self.task_provider.name)
@@ -113,7 +115,7 @@ class QuizEngine:
         print(f"\nQ{len(self.session_data['questions'])+1}: {question}")
         start = time.time()
         try:
-            answer = input_with_timeout("Answer: ", self.args.time_limit)
+            answer = self._input_with_timeout("Answer: ", self.args.time_limit)
         except TimeoutException:
             answer = None
             print("\nTime's up!")
