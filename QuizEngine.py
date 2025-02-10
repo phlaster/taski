@@ -8,7 +8,7 @@ from queue import Queue
 from threading import Thread
 
 from datetime import datetime
-from statistics import median
+from statistics import median, mean
 
 from TimeoutException import TimeoutException
 from utils import safe_filename, clear_screen
@@ -180,7 +180,7 @@ class QuizEngine:
         accuracy = round((correct_answers / total_questions * 100), 2) if total_questions > 0 else 0
         correct_times = [q['time_taken'] for q in self.session_data['questions'] if q['is_correct']]
         self.session_data['statistics'] = {
-            'average_time': round(sum(times)/len(times), 2) if times else 0,
+            'average_time': round(mean(times), 2) if times else 0,
             'median_time': round(median(times), 2) if times else 0,
             'fastest_correct': round(min(correct_times), 2) if correct_times else None,
             'slowest_answer': round(max(times), 2) if times else 0,
