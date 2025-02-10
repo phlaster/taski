@@ -149,7 +149,7 @@ class QuizEngine:
             'is_correct': is_correct
         })
 
-    def print_session_summary(self):
+    def _print_session_summary(self):
         print(f"\nSession Summary:")
         print(f"\tQuestions: {self.session_data['statistics']['correct_answers']}/{self.session_data['statistics']['total_questions']}")
         print(f"\tSession accuracy: {self.session_data['statistics']['accuracy']}%")
@@ -214,4 +214,4 @@ class QuizEngine:
              with open(output_path, 'w') as f:
                 json.dump(output_data, f, indent=2)
         
-        if not self.args.no_summary: self.print_session_summary()
+        if not self.args.no_summary: self._print_session_summary()
